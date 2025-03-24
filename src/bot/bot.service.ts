@@ -122,12 +122,19 @@ export class BotService implements OnModuleInit {
       });
 
       if (activeCode) {
-        // @ts-ignore
-        await ctx.api.answerCallbackQuery(ctx.callbackQuery?.id || '', {
-          text: '🇺🇿 Eski kodingiz hali ham kuchda ☝️\n\n🇺🇸 Your code is still valid ☝️',
-          show_alert: true,
-        });
-        return;
+        if (activeCode) {
+          if (ctx.callbackQuery) {
+            // @ts-ignore
+            await ctx.api.answerCallbackQuery(ctx.callbackQuery.id, {
+              text: '🇺🇿 Eski kodingiz hali ham kuchda ☝️ ️',
+              show_alert: true,
+            });
+          } else {
+            await ctx.reply('🇺🇿 Eski kodingiz hali ham kuchda ☝️ ️');
+          }
+          return; // Important!
+        }
+
       }
 
       await this.sendAuthCode(ctx, userIdStr, user.phoneNumber);
@@ -168,7 +175,11 @@ export class BotService implements OnModuleInit {
       if (!this.instructionsSent.has(userIdStr)) {
         await ctx.reply(
           `🇺🇿 🔑 Yangi kod olish uchun /login ni bosing\n\n🇺🇸 🔑 To get a new code click /login`,
-          { parse_mode: 'HTML' },
+          { parse_mode: 'HTML',
+            reply_markup: {
+              remove_keyboard: true,
+            }
+          },
         );
         this.instructionsSent.add(userIdStr);
       }
