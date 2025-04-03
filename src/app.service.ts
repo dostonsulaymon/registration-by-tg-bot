@@ -41,6 +41,7 @@ export class AppService {
       telegramId: user.telegramId,
       firstName: user.firstName,
       lastName: user.lastName,
+      username: user.username,
       phoneNumber: user.phoneNumber,
       isValid: true,
     };

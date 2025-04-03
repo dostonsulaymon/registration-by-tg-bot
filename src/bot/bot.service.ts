@@ -59,7 +59,7 @@ export class BotService implements OnModuleInit {
 
   private async askContact(ctx: any, firstName: string) {
     await ctx.reply(
-      `🇺🇿\nSalom ${firstName} 👋\n@qirikki'ning rasmiy botiga xush kelibsiz\n\n⬇ Kontaktingizni yuboring (tugmani bosib)\n\n🇺🇸\nHi ${firstName} 👋\nWelcome to @qirikki's official bot\n\n⬇ Send your contact (by clicking button)`,
+      `🇺🇿\nSalom ${firstName} 👋 Viloyat Taxi'ning rasmiy botiga xush kelibsiz\n\n⬇ Kontaktingizni yuboring (tugmani bosib)\n\n🇺🇸\nHi ${firstName} 👋\nWelcome to Viloyat Taxi official bot\n\n⬇ Send your contact (by clicking button)`,
       {
         reply_markup: {
           keyboard: [
@@ -101,14 +101,23 @@ export class BotService implements OnModuleInit {
       }
 
       const userIdStr = ctx.from.id.toString();
-      const user = await this.userRepository.findOne({ where: { telegramId: userIdStr } });
+      const user = await this.userRepository.findOne({
+        where: { telegramId: userIdStr },
+      });
 
       if (!user) {
         await ctx.reply(
           '🇺🇿 Iltimos, avval kontaktingizni yuboring\n\n🇺🇸 Please share your contact first',
           {
             reply_markup: {
-              keyboard: [[{ text: 'Share Contact / Kontaktni yuborish', request_contact: true }]],
+              keyboard: [
+                [
+                  {
+                    text: 'Share Contact / Kontaktni yuborish',
+                    request_contact: true,
+                  },
+                ],
+              ],
               resize_keyboard: true,
               one_time_keyboard: true,
             },
@@ -134,7 +143,6 @@ export class BotService implements OnModuleInit {
           }
           return; // Important!
         }
-
       }
 
       await this.sendAuthCode(ctx, userIdStr, user.phoneNumber);
@@ -153,19 +161,24 @@ export class BotService implements OnModuleInit {
 
       const { phone_number, first_name, last_name } = ctx.message.contact;
       const userIdStr = ctx.from.id.toString();
+      const username = ctx.from.username;
 
-      let user = await this.userRepository.findOne({ where: { telegramId: userIdStr } });
+      let user = await this.userRepository.findOne({
+        where: { telegramId: userIdStr },
+      });
 
       if (user) {
-        await this.userRepository.update(user.id, { phoneNumber: phone_number });
+        await this.userRepository.update(user.id, {
+          phoneNumber: phone_number,
+        });
       } else {
-
         // if phoneNumber doesn't contain +, make sure to add this!!
 
         user = await this.userRepository.save({
           telegramId: userIdStr,
           firstName: first_name,
           lastName: last_name,
+          username: username,
           phoneNumber: phone_number,
         });
       }
@@ -175,10 +188,11 @@ export class BotService implements OnModuleInit {
       if (!this.instructionsSent.has(userIdStr)) {
         await ctx.reply(
           `🇺🇿 🔑 Yangi kod olish uchun /login ni bosing\n\n🇺🇸 🔑 To get a new code click /login`,
-          { parse_mode: 'HTML',
+          {
+            parse_mode: 'HTML',
             reply_markup: {
               remove_keyboard: true,
-            }
+            },
           },
         );
         this.instructionsSent.add(userIdStr);
@@ -188,34 +202,47 @@ export class BotService implements OnModuleInit {
 
   private registerRenewCommand() {
     this.bot.callbackQuery('renew_code', async (ctx) => {
-      const userIdStr = ctx.from?.id?.toString();
-      if (!userIdStr) return;
-
-      const user = await this.userRepository.findOne({ where: { telegramId: userIdStr } });
-
-      if (!user) {
-        await ctx.answerCallbackQuery({
-          text: 'Avval kontaktingizni yuboring / Please share your contact first',
-          show_alert: true,
-        });
-        return;
-      }
-
-      const activeCode = await this.authCodeRepository.findOne({
-        where: { userId: user.id, expiresAt: MoreThan(new Date()) },
-      });
-
-      if (activeCode) {
-        await ctx.answerCallbackQuery({
-          text: 'Eski kodingiz hali ham kuchda ☝️ / Your code is still valid ☝️',
-          show_alert: true,
-        });
-        return;
-      }
-
-      await ctx.answerCallbackQuery();
-
       try {
+        const userIdStr = ctx.from?.id?.toString();
+        if (!userIdStr) {
+          await ctx.answerCallbackQuery({
+            text: 'User not found',
+            show_alert: true,
+          });
+          return;
+        }
+
+        const user = await this.userRepository.findOne({
+          where: { telegramId: userIdStr },
+        });
+
+        if (!user) {
+          await ctx.answerCallbackQuery({
+            text: 'Avval kontaktingizni yuboring / Please share your contact first',
+            show_alert: true,
+          });
+          return;
+        }
+
+        const activeCode = await this.authCodeRepository.findOne({
+          where: { userId: user.id, expiresAt: MoreThan(new Date()) },
+        });
+
+        if (activeCode) {
+          await ctx.answerCallbackQuery({
+            text: 'Eski kodingiz hali ham kuchda ☝️ / Your code is still valid ☝️',
+            show_alert: true,
+          });
+          return;
+        }
+
+        // Now safe to acknowledge callback query without text
+        try {
+          await ctx.answerCallbackQuery();
+        } catch (ackError) {
+          console.warn('Could not acknowledge callback query', ackError);
+        }
+
         const code = await this.getRandomCode();
         const messageId = ctx.callbackQuery.message?.message_id;
         const chatId = ctx.callbackQuery.message?.chat.id;
@@ -232,7 +259,9 @@ export class BotService implements OnModuleInit {
           {
             parse_mode: 'HTML',
             reply_markup: {
-              inline_keyboard: [[{ text: '🔄 Yangilash / Renew', callback_data: 'renew_code' }]],
+              inline_keyboard: [
+                [{ text: '🔄 Yangilash / Renew', callback_data: 'renew_code' }],
+              ],
             },
           },
         );
@@ -240,11 +269,24 @@ export class BotService implements OnModuleInit {
         await this.saveAuthCode(user.id, code);
         this.scheduleCodeExpiration(chatId, messageId);
       } catch (error) {
-        console.error('Failed to edit message with new code', error);
-        await this.sendAuthCode(ctx, userIdStr, user.phoneNumber);
+        console.error('Callback query error:', error);
+        try {
+          await ctx.answerCallbackQuery({
+            text: 'An error occurred. Please try again.',
+            show_alert: true,
+          });
+        } catch (finalError) {
+          console.error('Final error handling failed', finalError);
+        }
       }
     });
+
+    // Global error handler
+    this.bot.catch((err) => {
+      console.error('Bot global error:', err);
+    });
   }
+
   private async sendAuthCodeFirstTime(
     ctx: any,
     userId: string,
@@ -253,7 +295,9 @@ export class BotService implements OnModuleInit {
     const code = await this.getRandomCode();
 
     // Get user id from database
-    const user = await this.userRepository.findOne({ where: { telegramId: userId } });
+    const user = await this.userRepository.findOne({
+      where: { telegramId: userId },
+    });
     if (!user) {
       console.error('User not found in database');
       return;
@@ -278,7 +322,9 @@ export class BotService implements OnModuleInit {
     const code = await this.getRandomCode();
 
     // Get user id from database
-    const user = await this.userRepository.findOne({ where: { telegramId: userId } });
+    const user = await this.userRepository.findOne({
+      where: { telegramId: userId },
+    });
     if (!user) {
       console.error('User not found in database');
       return;

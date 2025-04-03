@@ -3,5 +3,6 @@ export class ResponseDto {
   isValid: boolean;
   firstName?: string;
   lastName?: string;
+  username?: string;
   phoneNumber?: string;
 }
